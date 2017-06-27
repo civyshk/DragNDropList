@@ -18,18 +18,28 @@ package com.terlici.dragndroplist;
 
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.PixelFormat;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.Adapter;
+import android.widget.TextView;
 import android.widget.WrapperListAdapter;
 
 import com.terlici.dragndroplist.DragNDropAdapter;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.security.AccessControlException;
 
 public class DragNDropListView extends ListView {
 	
@@ -196,11 +206,65 @@ public class DragNDropListView extends ListView {
         dndAdapter.onItemDrag(this, item, mStartPosition, id);
 
 		item.setDrawingCacheEnabled(true);
-		
+
         // Create a copy of the drawing cache so that it does not get recycled
         // by the framework when the list tries to clean up memory
-        Bitmap bitmap = Bitmap.createBitmap(item.getDrawingCache());
-        
+		Bitmap bitmap = null;
+		Bitmap viewCache = item.getDrawingCache();
+//      Reflection works but I still get no access to a valid drawing cache. Code commented and saved here for future reference
+//		if (viewCache == null) {
+//            try {
+//                Method privateBuildDrawingCacheImplMethod = View.class.getDeclaredMethod("buildDrawingCacheImpl", boolean.class);
+//                privateBuildDrawingCacheImplMethod.setAccessible(true);
+//                try {
+//                    privateBuildDrawingCacheImplMethod.invoke(item, false);
+//                }catch(InvocationTargetException e) {
+//                    throw new RuntimeException(e);
+//                }catch(IllegalAccessException e) {
+//                    throw new RuntimeException(e);
+//                }
+//            }catch(NoSuchMethodException e) {
+//                throw new RuntimeException(e);
+//            }
+//
+//			Field privateCacheField = null;
+//			try {
+//				privateCacheField = View.class.getDeclaredField("mDrawingCache");
+//				privateCacheField.setAccessible(true);
+//				try {
+//					viewCache = (Bitmap) privateCacheField.get(item);
+//				}catch(IllegalAccessException e) {
+//                    throw new RuntimeException(e);
+//                }
+//			}catch(NoSuchFieldException e) {
+//                throw new RuntimeException(e);
+//            }
+//		}
+
+		if (viewCache != null) {
+			bitmap = Bitmap.createBitmap(viewCache);
+		}else{
+            //TODO omg this is a dirty hack which strongly hardcodes things from RPNCalc. Fix it
+
+            //The view item is probably too large,
+            // probably because the TextView (child nº 2) contains a fvcking big number,
+            // so set a smaller text there
+            ((TextView) ((ViewGroup) item).getChildAt(2)).setText(R.string.numberSubstitute);
+
+            //and let it measure its size
+            item.measure(MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED),
+                    MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+
+            //and, as I still cannot get its drawingCache bitmap
+            // because the view refuses to build one even now that it has a smaller text,
+            // maybe because it hasn't actually be drawn yet,
+            // just create a bitmap of desired size and draw on it
+            bitmap = Bitmap.createBitmap(item.getMeasuredWidth(), item.getMeasuredHeight(), Bitmap.Config.ARGB_8888);
+            Canvas c = new Canvas(bitmap);
+            item.layout(0, 0, item.getMeasuredWidth(), item.getMeasuredHeight());
+            item.draw(c);
+		}
+
         WindowManager.LayoutParams mWindowParams = new WindowManager.LayoutParams();
         mWindowParams.gravity = Gravity.TOP;
         mWindowParams.x = 0;
@@ -215,9 +279,8 @@ public class DragNDropListView extends ListView {
                 | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
         mWindowParams.format = PixelFormat.TRANSLUCENT;
         mWindowParams.windowAnimations = 0;
-        
-        Context context = getContext();
-        ImageView v = new ImageView(context);
+
+        ImageView v = new ImageView(getContext());
         v.setImageBitmap(bitmap);
 
         mWm.addView(v, mWindowParams);
