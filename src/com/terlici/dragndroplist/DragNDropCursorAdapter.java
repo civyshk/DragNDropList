@@ -85,7 +85,6 @@ public class DragNDropCursorAdapter extends SimpleCursorAdapter implements DragN
 
 	@Override
 	public void onItemDrag(DragNDropListView parent, View view, int position, long id) {
-		
 	}
 
 	@Override
